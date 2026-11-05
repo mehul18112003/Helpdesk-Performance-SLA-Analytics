@@ -1,0 +1,164 @@
+# Helpdesk Performance & SLA Analytics
+
+**End-to-end IT support operations dashboard built with SQL Server, Power BI**
+
+![Dashboard Preview](Screenshots/Executive%20Overview.png)
+
+---
+
+## Business Problem
+
+Large IT companies receive hundreds of support tickets daily across departments - hardware failures, software issues, access requests, network problems. Without structured analysis, IT managers have no visibility into:
+
+- Which ticket categories are breaching SLA deadlines repeatedly
+- Which agents are overloaded vs underutilised
+- Whether high-priority tickets are actually being resolved faster than low-priority ones
+- What time of day and week sees the highest ticket load
+- Which departments generate the most unresolved tickets
+- Whether SLA compliance is improving or stagnating over time
+
+The result is reactive IT support instead of proactive - problems keep recurring, SLAs get missed, and leadership has no data to make staffing or process decisions.
+
+---
+
+## Solution
+
+An end-to-end analytics dashboard that gives IT managers a single view of support operations - tracking ticket volumes, SLA compliance, agent performance, and department-wise burden across 26 months of data (January 2024 - February 2026).
+
+**Key insights the dashboard surfaces:**
+- SLA breach rate by category and priority
+- Average resolution time by agent and ticket type
+- Peak ticket submission periods (day/week/month)
+- Departments with highest unresolved ticket backlog
+- First-call resolution rate trends
+- Agent workload vs breach rate correlation
+
+**4 tables — 8,000+ records:**
+
+| Table | Rows | Description |
+|-------|------|-------------|
+| tickets | 8,000 | Core fact table - one row per support ticket |
+| agents | 20 | Support agent details - L1/L2/L3 teams, shifts, locations |
+| departments | 8 | Requesting departments with headcount for normalisation |
+| sla_policy | 20 | SLA thresholds by category + priority combination |
+
+## Project Structure
+
+```
+Helpdesk-Performance-SLA-Analytics/
+│
+├── Data/
+│   ├── tickets.csv
+│   ├── agents.csv
+│   ├── departments.csv
+│   └── sla_policy.csv
+│
+│
+├── SQL/
+│   └── helpdesk_complete.sql
+│
+├── PowerBI/
+│   └── Helpdesk_Performance_SLA_Analytics.pbix
+│
+├── Screenshots/
+│   ├── Executive Overview.png
+│   ├── SLA & Resolution Deep Dive.png
+│
+└── README.md
+```
+
+---
+
+## SQL Scripts
+
+The SQL script (`helpdesk_complete.sql`) is structured in 3 sections and is the backbone of the entire project.
+
+**Script 01 — Schema Creation & Data Load**
+- CREATE TABLE scripts for all 4 tables with primary keys, foreign keys, and CHECK constraints
+- Referential integrity enforced at database level — not in Power BI
+- Verification queries confirming row counts and zero orphan records
+
+**Script 02 — Data Cleaning & Type Correction**
+- Data type fixes - varchar → DATETIME using TRY_CONVERT (handles NULLs safely vs CONVERT)
+- agents.team column fix - wizard imported L1/L2/L3 as money type (1.00/2.00/3.00), corrected to VARCHAR
+- NULL analysis — distinguishing valid NULLs (open tickets have no resolved_date) from invalid ones
+- Whitespace trimming on all VARCHAR columns using LTRIM/RTRIM
+- Duplicate detection on ticket_id
+- Date logic validation — resolved_date must be after created_date
+
+**Script 03 — Derived Columns & Analytical Queries**
+- `resolution_hours` - DATEDIFF in minutes divided by 60.0 for decimal precision (not DATEDIFF in hours which truncates)
+- `response_hours` - first response time calculation
+- `sla_breach_flag` - joined to sla_policy on category + priority to get specific threshold per ticket type
+- `response_breach_flag` - first response SLA violation flag
+- 3 analytical queries: breach rates, agent rankings using RANK() window functions, department burden, peak hour heatmap, monthly trends, FCR rate
+- 3 Power BI views — `vw_tickets_full`, `vw_agent_summary`, `vw_dept_summary`
+
+---
+
+## Dashboard - 2 Pages
+
+### Page 1 - Executive Overview
+
+High-level health snapshot for IT leadership.
+
+![Page 1](Screenshots/Executive%20Overview.png)
+
+**KPI Cards:** Total Tickets · SLA Breach % · Avg Resolution Hrs · Open Backlog · FCR Rate % · Critical Tickets
+
+**Visuals:**
+- Monthly Ticket Volume & SLA Breach Trend — dual-axis line chart showing volume and breach rate together
+- Ticket Volume by Category — Network highlighted in red as highest breach category
+- SLA Compliance vs Breach — donut chart with three segments: Compliant / Breached / Open/Unresolved
+- Ticket Volume by Priority Over Time — stacked column across all 26 months
+- Slicers: Date Range · Department · Priority
+- Key Insights callout box
+
+---
+
+### Page 2 - SLA & Resolution Deep Dive
+
+Where and why SLAs are being breached.
+
+![Page 2](Screenshots/SLA%20%26%20Resolution%20Deep%20Dive.png)
+
+**KPI Cards:** SLA Breach Rate · Avg Resolution Hrs · Total Breached Tickets · Reopen Rate %
+
+**Visuals:**
+- **Peak Hour Heatmap** — Matrix visual with conditional formatting gradient (dark navy → red) showing ticket load by Day × Hour. Monday 11am–1pm is peak. This directly answers staffing decisions.
+- Avg Resolution Time by Category — Other category takes longest at 44hrs despite lower volume
+- SLA Breach Rate by Category — Network 37.5% vs Access 13.1%
+- Monthly SLA Breach Rate Trend — line chart with average reference line showing no improvement trend
+- Top Agents by SLA Breach Rate — individual accountability view
+- Slicers: Category · Priority
+
+## Key Findings
+
+| Finding | Value | Business Implication |
+|---------|-------|---------------------|
+| Overall SLA breach rate | 23.49% | Nearly 1 in 4 tickets misses SLA deadline |
+| Network category breach rate | 37.5% | Highest — needs dedicated network support staffing |
+| Access category breach rate | 13.1% | Lowest — process working well, can be a model |
+| SLA breach trend over 26 months | No improvement | Systemic staffing issue, not random variation |
+| Peak ticket window | Monday 11am–1pm | Schedule more agents on Monday morning shifts |
+| Agent overload — top 3 | 973, 973, 928 tickets | vs avg 400 — redistribution decision needed immediately |
+| Marketing dept burden | 22.97 tickets/employee | Highest ratio — potential IT training gap for Marketing staff |
+| Other category resolution | 44 hrs avg | Longest time despite lowest volume — skill gap for complex issues |
+| First Call Resolution rate | 95.34% | Strong — minimal ticket reopening overall |
+| Reopen rate | 9.23% | ~737 tickets reopened — agents closing prematurely |
+| Open backlog | 1,177 tickets | 14.7% of all tickets unresolved |
+
+---
+
+## SLA Policy Reference
+
+| Category | Priority | Response SLA | Resolution SLA |
+|----------|----------|-------------|----------------|
+| Network | Critical | 1 hr | 2 hrs |
+| Hardware | Critical | 1 hr | 4 hrs |
+| Software | Critical | 1 hr | 6 hrs |
+| Hardware | High | 2 hrs | 8 hrs |
+| Software | High | 2 hrs | 12 hrs |
+| Access | Medium | 4 hrs | 24 hrs |
+| Any | Low | 8 hrs | 72 hrs |
+
